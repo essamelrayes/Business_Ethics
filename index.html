@@ -77,12 +77,13 @@ details div{padding:12px 20px 14px 42px}
 /* ---------- buttons / CTA ---------- */
 .cta{display:inline-block;margin-top:24px;background:#fff;color:#0d4a3b;text-decoration:none;font-weight:700;font-size:.95rem;padding:11px 22px;border-radius:99px;border:0;cursor:pointer;font-family:var(--sans)}
 .cta:hover{background:#e3f0ec}
-.btn{display:inline-block;border:0;background:var(--acc);color:var(--onacc);border-radius:99px;padding:9px 20px;font:600 .95rem var(--sans);cursor:pointer;text-decoration:none;transition:background .15s ease}
+.btn{display:inline-block;border:0;background:var(--acc);color:var(--onacc);border-radius:99px;padding:9px 20px;font:600 .95rem var(--sans);cursor:pointer;text-decoration:none;transition:background .15s ease,border-color .15s ease,color .15s ease}
 .btn:hover{background:var(--acc2)}
 .btn.ghost{background:none;border:1px solid var(--line);color:var(--ink)}
 .btn.ghost:hover{background:var(--tint)}
+.btn.ghost.active{background:var(--tint);border-color:var(--acc);color:var(--acc2)}
 .btn.sm{padding:6px 14px;font-size:.85rem}
-.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:disabled{opacity:.4;cursor:not-allowed}
 
 /* ---------- quiz shell (separate view) ---------- */
 .quiz-top{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:9px 20px;flex-wrap:wrap}
@@ -118,10 +119,15 @@ details div{padding:12px 20px 14px 42px}
 .opt.wrong .k{color:var(--bad)}
 .opt:disabled{cursor:default}
 
-/* ---------- MCQ actions (desktop) ---------- */
+/* ---------- MCQ actions ---------- */
 .mcq-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:20px}
 .actions-primary{display:flex;gap:10px;flex-wrap:wrap}
 .end-test{margin-left:auto}
+@media(min-width:721px){
+  #prevBtn{order:1}
+  #revealBtn{order:2}
+  #nextBtn{order:3}
+}
 
 /* ---------- results ---------- */
 .res-head{text-align:center}
@@ -132,11 +138,16 @@ details div{padding:12px 20px 14px 42px}
 .no{color:var(--bad)}
 .rev-q{font-weight:500}
 
+/* review filters + hidden review panel */
+.rev-filters{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px}
+.rev-empty{padding:12px 0}
+
 @media print{
-  .quiz-top,.mcq-actions,.mcq-bar,.mcq-meta,.cta{display:none!important}
+  .quiz-top,.mcq-actions,.mcq-bar,.mcq-meta,.cta,.rev-filters{display:none!important}
   body.quiz-mode nav#nav{display:none!important}
   nav,.tabs,header .scale{display:none}
   .panel[hidden]{display:block!important}
+  #revList{display:block!important}
   body{background:#fff}header{background:#fff;color:#000;padding:0}
   section{break-inside:avoid-page}details{break-inside:avoid}
 }
@@ -233,8 +244,9 @@ details div{padding:12px 20px 14px 42px}
     border-radius:12px;
     box-sizing:border-box;
   }
+  .actions-primary #revealBtn{grid-column:1 / -1}
 
-  /* "End test" — moved far away from Next, own row, distinct look */
+  /* "End test" — own row, distinct look, far from Next */
   .end-test{
     margin-left:0;
     width:100%;
@@ -262,6 +274,13 @@ details div{padding:12px 20px 14px 42px}
     border-color:var(--bad);
     background:var(--badbg);
   }
+
+  /* Start-view back button */
+  #startBack{width:100%;box-sizing:border-box;min-height:48px}
+
+  /* Review filters — full-width stacked on mobile */
+  .rev-filters{flex-direction:column;gap:8px}
+  .rev-filters .btn{width:100%;box-sizing:border-box;text-align:center}
 
   /* Results */
   .res-pct{font-size:clamp(2.4rem,14vw,3.4rem)}
@@ -587,6 +606,7 @@ details div{padding:12px 20px 14px 42px}
         <div class="mcq-actions" style="flex-direction:column;align-items:stretch;gap:12px">
           <button class="btn" id="startBtn" type="button" style="width:100%;min-height:52px;font-size:1rem">Start test</button>
           <span class="lede" id="selCount" style="margin:0;text-align:center"></span>
+          <button class="btn ghost" id="startBack" type="button">← Back to study guide</button>
         </div>
       </div>
     </div>
@@ -603,8 +623,9 @@ details div{padding:12px 20px 14px 42px}
         <div id="opts"></div>
         <div class="mcq-actions">
           <div class="actions-primary">
-            <button class="btn" id="revealBtn" type="button">Show answer</button>
+            <button class="btn ghost" id="prevBtn" type="button">← Previous</button>
             <button class="btn ghost" id="nextBtn" type="button">Next</button>
+            <button class="btn" id="revealBtn" type="button">Show answer</button>
           </div>
           <button class="btn ghost end-test" id="quitBtn" type="button">End test</button>
         </div>
@@ -627,7 +648,6 @@ details div{padding:12px 20px 14px 42px}
 (function(){
 var root=document.documentElement;
 var themeBtns=[].slice.call(document.querySelectorAll('[data-theme-toggle]'));
-/* Light theme is the default; data-theme is set to "light" on <html>. */
 function dark(){return root.dataset.theme==='dark'}
 function label(){themeBtns.forEach(function(b){b.textContent=dark()?'Light mode':'Dark mode'})}
 themeBtns.forEach(function(b){
@@ -854,9 +874,9 @@ function msg(p){
 var startView=$('mcq-start'),runView=$('mcq-run'),resultView=$('mcq-result');
 var chaptersEl=$('chapters'),selCount=$('selCount'),startBtn=$('startBtn'),toggleAllBtn=$('toggleAll');
 var barFill=$('barFill'),qCounter=$('qCounter'),qChapter=$('qChapter'),qText=$('qText'),optsEl=$('opts');
-var revealBtn=$('revealBtn'),nextBtn=$('nextBtn'),quitBtn=$('quitBtn');
+var revealBtn=$('revealBtn'),nextBtn=$('nextBtn'),prevBtn=$('prevBtn'),quitBtn=$('quitBtn');
 var resultBody=$('resultBody');
-var run=null,reviewData=null;
+var run=null;
 
 /* ---------- build chapter picker ---------- */
 var counts={};
@@ -896,8 +916,11 @@ updateCount();
 startBtn.onclick=start;
 revealBtn.onclick=reveal;
 nextBtn.onclick=next;
+prevBtn.onclick=prev;
 quitBtn.onclick=function(){if(window.confirm('End the test and see your results?'))finish()};
 $('backBtn').onclick=GuideApp.backToGuide;
+$('startBack').onclick=GuideApp.backToGuide;
+$('resBack').onclick=GuideApp.backToGuide;
 $('retryBtn').onclick=function(){
   resultView.hidden=true;runView.hidden=true;startView.hidden=false;run=null;
   updateCount();
@@ -959,6 +982,7 @@ function render(){
   });
 
   revealBtn.hidden=rev;
+  prevBtn.disabled=(run.idx===0);
   nextBtn.textContent=(run.idx===total-1)?'Finish':'Next';
 }
 
@@ -975,6 +999,9 @@ function next(){
   if(run.idx<run.list.length-1){run.idx++;render();window.scrollTo(0,0);}
   else finish();
 }
+function prev(){
+  if(run.idx>0){run.idx--;render();window.scrollTo(0,0);}
+}
 
 /* ---------- results ---------- */
 function finish(){
@@ -988,6 +1015,7 @@ function finish(){
     var b=byPart[q.p]||(byPart[q.p]={c:0,t:0});
     b.t++;if(ok)b.c++;
   });
+  var wrong=total-correct;
   var pct=total?Math.round(correct/total*100):0;
 
   var h='';
@@ -1008,46 +1036,64 @@ function finish(){
   h+='</table></div>';
 
   h+='<h3>Review</h3>';
-  h+='<div class="mcq-actions" style="margin:0 0 6px;flex-direction:row"><button class="btn ghost sm" id="revToggle" type="button"></button></div>';
-  h+='<div id="revList"></div>';
+  h+='<p class="lede" style="margin-bottom:0">You answered <b>'+correct+'</b> of <b>'+total+'</b> correctly'+(wrong?' — <b class="no">'+wrong+' incorrect</b>':'')+'.</p>';
+  if(total>0){
+    h+='<p class="lede" style="margin:8px 0 0;font-size:.92rem">Reviews are hidden until you choose to open them.</p>';
+  }
+  h+='<div class="rev-filters">';
+  if(wrong>0){
+    h+='<button class="btn ghost sm" id="revWrong" type="button">Review incorrect ('+wrong+')</button>';
+  }
+  h+='<button class="btn ghost sm" id="revAll" type="button">Show all '+total+' questions</button>';
+  h+='</div>';
+  h+='<div id="revList" hidden></div>';
 
   resultBody.innerHTML=h;
 
-  var wrong=total-correct;
-  reviewData={list:run.list,answers:run.answers,wrongOnly:wrong>0&&wrong<total};
-  var toggle=$('revToggle');
-  function paintToggle(){
-    toggle.textContent=reviewData.wrongOnly
-      ? 'Show all '+total+' questions'
-      : 'Show incorrect only ('+wrong+')';
-    toggle.disabled=(wrong===0);
-  }
-  toggle.onclick=function(){
-    reviewData.wrongOnly=!reviewData.wrongOnly;
-    paintToggle();renderReview();
-  };
-  paintToggle();
-  renderReview();
-}
+  var revList=$('revList');
+  var revWrongBtn=$('revWrong');
+  var revAllBtn=$('revAll');
+  var mode=null;
 
-function renderReview(){
-  var d=reviewData,out='';
-  d.list.forEach(function(q,i){
-    var ok=d.answers[i]===q.a;
-    if(d.wrongOnly&&ok)return;
-    out+='<details><summary><span class="rev-q">'+esc(q.q)+'</span> <b class="'+(ok?'ok':'no')+'">'+(ok?'\u2713':'\u2717')+'</b></summary><div>';
-    q.o.forEach(function(t,j){
-      var mark='';
-      if(j===q.a)mark=' <b class="ok">\u2190 correct</b>';
-      else if(j===d.answers[i])mark=' <b class="no">\u2190 your answer</b>';
-      out+='<p style="margin:4px 0">'+letter(j)+'. '+esc(t)+mark+'</p>';
+  function buildReview(wrongOnly){
+    var out='';
+    run.list.forEach(function(q,i){
+      var ok=run.answers[i]===q.a;
+      if(wrongOnly&&ok)return;
+      out+='<details><summary><span class="rev-q">'+esc(q.q)+'</span> <b class="'+(ok?'ok':'no')+'">'+(ok?'\u2713':'\u2717')+'</b></summary><div>';
+      q.o.forEach(function(t,j){
+        var mark='';
+        if(j===q.a)mark=' <b class="ok">\u2190 correct</b>';
+        else if(j===run.answers[i])mark=' <b class="no">\u2190 your answer</b>';
+        out+='<p style="margin:4px 0">'+letter(j)+'. '+esc(t)+mark+'</p>';
+      });
+      if(run.answers[i]===null)out+='<p class="no" style="margin:8px 0 0"><b>Not answered</b></p>';
+      out+='<p style="margin:10px 0 0;font-size:.85rem;color:var(--mute)">'+esc(PARTS[q.p])+'</p>';
+      out+='</div></details>';
     });
-    if(d.answers[i]===null)out+='<p class="no" style="margin:8px 0 0"><b>Not answered</b></p>';
-    out+='<p style="margin:10px 0 0;font-size:.85rem;color:var(--mute)">'+esc(PARTS[q.p])+'</p>';
-    out+='</div></details>';
-  });
-  if(!out)out='<p class="lede">Nothing to show here.</p>';
-  $('revList').innerHTML=out;
+    if(!out)out='<p class="lede rev-empty">Nothing to show here.</p>';
+    return out;
+  }
+
+  function setMode(next){
+    // Toggle off when clicking the active filter
+    if(mode===next){
+      mode=null;
+      revList.hidden=true;
+      revList.innerHTML='';
+      if(revWrongBtn)revWrongBtn.classList.remove('active');
+      revAllBtn.classList.remove('active');
+      return;
+    }
+    mode=next;
+    revList.hidden=false;
+    revList.innerHTML=buildReview(next==='wrong');
+    if(revWrongBtn)revWrongBtn.classList.toggle('active',next==='wrong');
+    revAllBtn.classList.toggle('active',next==='all');
+  }
+
+  if(revWrongBtn)revWrongBtn.onclick=function(){setMode('wrong')};
+  revAllBtn.onclick=function(){setMode('all')};
 }
 
 })();
